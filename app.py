@@ -225,7 +225,7 @@ with col2:
             data=waypoint_df,
             get_position='[lon, lat]',
             get_color='[200, 30, 0, 160]',
-            get_radius=10000,
+            get_radius=2000,
         )
 
         # Layer for the waypoint labels
@@ -242,17 +242,22 @@ with col2:
         layers = [scatterplot, text_layer]
 
         # Layer for the route path
+        path_data = []
         for p in st.session_state.route_polylines:
             decoded_polyline = polyline.decode(p)
-            path_df = pd.DataFrame(decoded_polyline, columns=['lat', 'lon'])
-            path_layer = pdk.Layer(
-                'PathLayer',
-                data=path_df,
-                get_path='[lon, lat]',
-                get_color='[0, 0, 255, 255]',
-                width_min_pixels=3,
-            )
-            layers.append(path_layer)
+            # For pydeck, the path should be a list of [lon, lat]
+            path_data.append([[lon, lat] for lat, lon in decoded_polyline])
+
+        path_df = pd.DataFrame(path_data, columns=['path'])
+
+        path_layer = pdk.Layer(
+            'PathLayer',
+            data=path_df,
+            get_path='path',
+            get_color='[0, 0, 255, 255]',
+            width_min_pixels=3,
+        )
+        layers.append(path_layer)
 
         st.pydeck_chart(pdk.Deck(
             map_style='mapbox://styles/mapbox/light-v9',
