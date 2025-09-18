@@ -205,33 +205,54 @@ if st.session_state.optimized_route:
 with col2:
     st.header("Map")
     if st.session_state.waypoint_coords:
+        # Create a DataFrame for the waypoint coordinates and labels
+        waypoint_df = pd.DataFrame(st.session_state.waypoint_coords, columns=['lat', 'lon'])
+        waypoint_df['label'] = [f"Stop {i+1}" for i in range(len(st.session_state.waypoint_coords))]
+        waypoint_df.iloc[0, waypoint_df.columns.get_loc('label')] = 'Start'
+        waypoint_df.iloc[-1, waypoint_df.columns.get_loc('label')] = 'End'
+
+
         view_state = pdk.ViewState(
-            latitude=st.session_state.waypoint_coords[0][0],
-            longitude=st.session_state.waypoint_coords[0][1],
-            zoom=10,
+            latitude=waypoint_df['lat'].mean(),
+            longitude=waypoint_df['lon'].mean(),
+            zoom=5,
             pitch=50,
         )
 
-        layers = [
-            pdk.Layer(
-                'ScatterplotLayer',
-                data=pd.DataFrame(st.session_state.waypoint_coords, columns=['lat', 'lon']),
-                get_position='[lon, lat]',
-                get_color='[200, 30, 0, 160]',
-                get_radius=200,
-            )
-        ]
+        # Layer for the waypoints
+        scatterplot = pdk.Layer(
+            'ScatterplotLayer',
+            data=waypoint_df,
+            get_position='[lon, lat]',
+            get_color='[200, 30, 0, 160]',
+            get_radius=10000,
+        )
 
+        # Layer for the waypoint labels
+        text_layer = pdk.Layer(
+            "TextLayer",
+            data=waypoint_df,
+            get_position='[lon, lat]',
+            get_text="label",
+            get_color=[0, 0, 0, 200],
+            get_size=15,
+            get_alignment_baseline="'bottom'",
+        )
+
+        layers = [scatterplot, text_layer]
+
+        # Layer for the route path
         for p in st.session_state.route_polylines:
             decoded_polyline = polyline.decode(p)
             path_df = pd.DataFrame(decoded_polyline, columns=['lat', 'lon'])
-            layers.append(pdk.Layer(
+            path_layer = pdk.Layer(
                 'PathLayer',
                 data=path_df,
                 get_path='[lon, lat]',
                 get_color='[0, 0, 255, 255]',
-                width_min_pixels=2,
-            ))
+                width_min_pixels=3,
+            )
+            layers.append(path_layer)
 
         st.pydeck_chart(pdk.Deck(
             map_style='mapbox://styles/mapbox/light-v9',
