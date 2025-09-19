@@ -1,5 +1,8 @@
 # Route Optimizer
 
+![Create venv (Windows)](https://github.com/George-Nyamao/Route-Optimizer/actions/workflows/create_venv_windows.yml/badge.svg)
+![Create venv (Linux/macOS)](https://github.com/George-Nyamao/Route-Optimizer/actions/workflows/create_venv_unix.yml/badge.svg)
+
 This is a simple web application that optimizes a route between a start and end address with multiple intermediate stops. It uses the Google Maps Routes API to calculate the most efficient route.
 
 ## Features
