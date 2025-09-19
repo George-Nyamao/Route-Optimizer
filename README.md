@@ -40,9 +40,7 @@ This is a simple web application that optimizes a route between a start and end 
 
 The project is tested using Python 3.11 on Windows. Pandas and several other packages provide prebuilt wheels for Python 3.11 which avoids expensive local builds.
 
-### Windows (PowerShell)
-
-Recommended steps to recreate the development venv:
+Recommended steps to recreate the development venv (PowerShell):
 
 ```powershell
 # Install Python 3.11 if you don't have it (use the installer from python.org or winget):
@@ -60,32 +58,5 @@ python -m pip install -U pip setuptools wheel
 python -m pip install -r .\requirements.txt
 ```
 
-### Linux (bash) and macOS (zsh)
-
-Recommended steps to recreate the development venv:
-
-```bash
-# Install Python 3.11 if you don't have it.
-# On Debian/Ubuntu:
-sudo apt-get update
-sudo apt-get install python3.11 python3.11-venv
-
-# On macOS (using Homebrew):
-brew install python@3.11
-
-# Remove any existing venv (optional backup first):
-rm -rf ./map_env
-
-# Create a new venv using Python 3.11:
-python3.11 -m venv ./map_env
-
-# Activate the venv and install deps:
-source ./map_env/bin/activate
-python -m pip install -U pip setuptools wheel
-python -m pip install -r ./requirements.txt
-```
-
 Note about dependencies
 - `Werkzeug` is pinned to `<3.0` in `requirements.txt` to ensure compatibility with the Flask/Streamlit versions used here. If you upgrade Flask/Streamlit you may need to review and update this pin.
-
-If you'd like, I can add a `scripts/create_venv.ps1` helper that automates the venv recreation.
