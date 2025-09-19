@@ -248,7 +248,10 @@ with col2:
             # For pydeck, the path should be a list of [lon, lat]
             path_data.append([[lon, lat] for lat, lon in decoded_polyline])
 
-        path_df = pd.DataFrame(path_data, columns=['path'])
+        # Each row should contain a single 'path' entry (a list of [lon, lat]).
+        # Construct the DataFrame from a dict to avoid pandas expanding the inner lists
+        # into multiple columns (which causes the ValueError seen earlier).
+        path_df = pd.DataFrame({'path': path_data})
 
         path_layer = pdk.Layer(
             'PathLayer',

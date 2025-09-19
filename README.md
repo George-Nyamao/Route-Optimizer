@@ -35,3 +35,30 @@ This is a simple web application that optimizes a route between a start and end 
     -   Enter your Google Maps API key.
     -   Enter your start and end addresses, and add any intermediate stops.
     -   Click "Optimize Route" to see the most efficient path.
+
+## Development environment
+
+The project is tested using Python 3.11 on Windows. Pandas and several other packages provide prebuilt wheels for Python 3.11 which avoids expensive local builds.
+
+Recommended steps to recreate the development venv (PowerShell):
+
+```powershell
+# Install Python 3.11 if you don't have it (use the installer from python.org or winget):
+winget install --id Python.Python.3.11 -e --accept-package-agreements --accept-source-agreements
+
+# Remove any existing venv (optional backup first):
+Remove-Item -Recurse -Force .\map_env
+
+# Create a new venv using Python 3.11 (adjust path if needed):
+py -3.11 -m venv .\map_env
+
+# Activate the venv and install deps:
+.\map_env\Scripts\Activate.ps1
+python -m pip install -U pip setuptools wheel
+python -m pip install -r .\requirements.txt
+```
+
+Note about dependencies
+- `Werkzeug` is pinned to `<3.0` in `requirements.txt` to ensure compatibility with the Flask/Streamlit versions used here. If you upgrade Flask/Streamlit you may need to review and update this pin.
+
+If you'd like, I can add a `scripts/create_venv.ps1` helper that automates the venv recreation. 
