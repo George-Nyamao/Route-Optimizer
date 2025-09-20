@@ -1,25 +1,13 @@
 import streamlit as st
 import pandas as pd
-import pydeck as pdk
 import requests
 from itertools import permutations
 import os
-import polyline
+from urllib.parse import quote
 
 st.set_page_config(layout="wide")
 
 st.title("Route Optimizer")
-
-def get_geocode(address, api_key):
-    url = f"https://maps.googleapis.com/maps/api/geocode/json?address={address}&key={api_key}"
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching geocode: {response.text}")
-    data = response.json()
-    if data['status'] != 'OK':
-        raise Exception(f"Error from Geocoding API: {data.get('error_message', data['status'])}")
-    location = data['results'][0]['geometry']['location']
-    return location['lat'], location['lng']
 
 def get_distance_matrix(waypoints, api_key):
     url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
@@ -56,29 +44,7 @@ def get_distance_matrix(waypoints, api_key):
 
     return dist_matrix
 
-def get_route_polyline(origin, destination, api_key):
-    url = "https://routes.googleapis.com/directions/v2:computeRoutes"
-    headers = {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": api_key,
-        "X-Goog-FieldMask": "routes.polyline.encodedPolyline"
-    }
-    payload = {
-        "origin": {"address": origin},
-        "destination": {"address": destination},
-        "travelMode": "DRIVE",
-    }
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching route polyline: {response.text}")
-    data = response.json()
-    if not data.get('routes'):
-        raise Exception(f"Could not find a route between {origin} and {destination}")
-    return data['routes'][0]['polyline']['encodedPolyline']
-
-
 def optimize_route(waypoints, dist_matrix):
-    # ... (same as before)
     if len(waypoints) <= 2:
         return waypoints
 
@@ -134,10 +100,8 @@ if 'stops' not in st.session_state:
     st.session_state.stops = []
 if 'optimized_route' not in st.session_state:
     st.session_state.optimized_route = None
-if 'route_polylines' not in st.session_state:
-    st.session_state.route_polylines = []
-if 'waypoint_coords' not in st.session_state:
-    st.session_state.waypoint_coords = []
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = ""
 
 
 def add_stop():
@@ -147,12 +111,11 @@ def remove_stop(index):
     st.session_state.stops.pop(index)
 
 # --- UI ---
+st.session_state.api_key = st.text_input("Google Maps API Key", type="password", value=st.session_state.api_key)
 col1, col2 = st.columns(2)
 
 with col1:
     st.header("Inputs")
-    api_key = st.text_input("Google Maps API Key", type="password")
-
     start_address = st.text_input("Start Address")
     end_address = st.text_input("End Address")
 
@@ -168,7 +131,7 @@ with col1:
         st.experimental_rerun()
 
     if st.button("Optimize Route"):
-        if not api_key:
+        if not st.session_state.api_key:
             st.error("Please enter your Google Maps API Key.")
         elif not start_address or not end_address:
             st.error("Please enter a start and end address.")
@@ -176,23 +139,9 @@ with col1:
             with st.spinner("Optimizing route..."):
                 try:
                     waypoints = [start_address] + [s for s in st.session_state.stops if s] + [end_address]
-                    dist_matrix = get_distance_matrix(waypoints, api_key)
+                    dist_matrix = get_distance_matrix(waypoints, st.session_state.api_key)
                     optimized_route = optimize_route(waypoints, dist_matrix)
                     st.session_state.optimized_route = optimized_route
-
-                    st.session_state.waypoint_coords = [get_geocode(addr, api_key) for addr in optimized_route]
-
-                    polylines = []
-                    for i in range(len(optimized_route) - 1):
-                        p = get_route_polyline(optimized_route[i], optimized_route[i+1], api_key)
-                        polylines.append(p)
-
-                    if start_address == end_address:
-                        p = get_route_polyline(optimized_route[-1], optimized_route[0], api_key)
-                        polylines.append(p)
-
-                    st.session_state.route_polylines = polylines
-
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
 
@@ -204,76 +153,16 @@ if st.session_state.optimized_route:
 
 with col2:
     st.header("Map")
-    if st.session_state.waypoint_coords:
-        # Create a DataFrame for the waypoint coordinates and labels
-        waypoint_df = pd.DataFrame(st.session_state.waypoint_coords, columns=['lat', 'lon'])
-        waypoint_df['label'] = [f"Stop {i+1}" for i in range(len(st.session_state.waypoint_coords))]
-        waypoint_df.iloc[0, waypoint_df.columns.get_loc('label')] = 'Start'
-        waypoint_df.iloc[-1, waypoint_df.columns.get_loc('label')] = 'End'
+    if st.session_state.optimized_route:
+        origin = quote(st.session_state.optimized_route[0])
+        destination = quote(st.session_state.optimized_route[-1])
+        # The waypoints parameter should only contain the stops between the origin and destination.
+        waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
 
-
-        view_state = pdk.ViewState(
-            latitude=waypoint_df['lat'].mean(),
-            longitude=waypoint_df['lon'].mean(),
-            zoom=5,
-            pitch=50,
-        )
-
-        # Layer for the waypoints
-        scatterplot = pdk.Layer(
-            'ScatterplotLayer',
-            data=waypoint_df,
-            get_position='[lon, lat]',
-            get_color='[200, 30, 0, 160]',
-            get_radius=2000,
-        )
-
-        # Layer for the waypoint labels
-        text_layer = pdk.Layer(
-            "TextLayer",
-            data=waypoint_df,
-            get_position='[lon, lat]',
-            get_text="label",
-            get_color=[0, 0, 0, 200],
-            get_size=15,
-            get_alignment_baseline="'bottom'",
-        )
-
-        layers = [scatterplot, text_layer]
-
-        # Layer for the route path
-        path_data = []
-        for p in st.session_state.route_polylines:
-            decoded_polyline = polyline.decode(p)
-            # For pydeck, the path should be a list of [lon, lat]
-            path_data.append([[lon, lat] for lat, lon in decoded_polyline])
-
-        # Each row should contain a single 'path' entry (a list of [lon, lat]).
-        # Construct the DataFrame from a dict to avoid pandas expanding the inner lists
-        # into multiple columns (which causes the ValueError seen earlier).
-        path_df = pd.DataFrame({'path': path_data})
-
-        path_layer = pdk.Layer(
-            'PathLayer',
-            data=path_df,
-            get_path='path',
-            get_color='[0, 0, 255, 255]',
-            width_min_pixels=3,
-        )
-        layers.append(path_layer)
-
-        st.pydeck_chart(pdk.Deck(
-            map_style='mapbox://styles/mapbox/light-v9',
-            initial_view_state=view_state,
-            layers=layers
-        ))
+        embed_url = f"https://www.google.com/maps/embed/v1/directions?key={st.session_state.api_key}&origin={origin}&destination={destination}&waypoints={waypoints_str}"
+        st.components.v1.iframe(embed_url, height=600)
     else:
-        st.pydeck_chart(pdk.Deck(
-            map_style='mapbox://styles/mapbox/light-v9',
-            initial_view_state=pdk.ViewState(
-                latitude=40.7128,
-                longitude=-74.0060,
-                zoom=11,
-                pitch=50,
-            )
-        ))
+        # Placeholder map
+        placeholder_address = "4645 Plano Pkwy, Carrollton, TX 75010, USA"
+        embed_url = f"https://www.google.com/maps/embed/v1/place?key={st.session_state.api_key}&q={quote(placeholder_address)}"
+        st.components.v1.iframe(embed_url, height=600)
