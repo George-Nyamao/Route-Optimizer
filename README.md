@@ -10,6 +10,7 @@ This is a simple web application that optimizes a route between a start and end 
 -   Find the optimal route for a multi-stop trip.
 -   Supports both one-way and round trips.
 -   Simple web interface to enter addresses and view the optimized route.
+-   Bulk add stops by pasting a list of addresses.
 
 ## Setup and Usage
 
@@ -24,9 +25,13 @@ This is a simple web application that optimizes a route between a start and end 
     pip install -r requirements.txt
     ```
 
-3.  **Get a Google Maps API Key:**
-    -   You will need a Google Maps API key with the **Routes API** enabled.
-    -   You can get a key from the [Google Cloud Console](https://console.cloud.google.com/).
+3.  **Create a `.env` file:**
+    -   Create a file named `.env` in the root of the project.
+    -   Add your Google Maps API key to this file in the following format:
+        ```
+        GOOGLE_MAPS_API_KEY="YOUR_API_KEY_HERE"
+        ```
+    -   You will need a Google Maps API key with the **Routes API** and **Geocoding API** enabled. You can get a key from the [Google Cloud Console](https://console.cloud.google.com/).
 
 4.  **Run the application:**
     ```bash
@@ -35,8 +40,8 @@ This is a simple web application that optimizes a route between a start and end 
 
 5.  **Use the application:**
     -   Open your web browser and go to `http://127.0.0.1:8501`.
-    -   Enter your Google Maps API key.
-    -   Enter your start and end addresses, and add any intermediate stops.
+    -   Enter your start and end addresses.
+    -   Add intermediate stops either one by one, or by pasting a list of addresses into the text area.
     -   Click "Optimize Route" to see the most efficient path.
 
 ## Development environment

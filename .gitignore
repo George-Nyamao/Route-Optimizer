@@ -1,0 +1,4 @@
+app.log
+.env
+__pycache__/
+map_env/

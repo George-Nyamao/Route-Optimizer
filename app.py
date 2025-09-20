@@ -4,6 +4,9 @@ import requests
 from itertools import permutations
 import os
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+load_dotenv()
 
 st.set_page_config(layout="wide")
 
@@ -44,24 +47,23 @@ def get_distance_matrix(waypoints, api_key):
 
     return dist_matrix
 
-def optimize_route(waypoints, dist_matrix):
-    if len(waypoints) <= 2:
+def optimize_route(waypoints, dist_matrix, is_round_trip):
+    if len(waypoints) < 2:
         return waypoints
 
     if len(waypoints) > 10:
         st.error("Too many waypoints for brute-force optimization. Please use 8 or fewer stops.")
         return None
 
-    start_address = waypoints[0]
-    end_address = waypoints[-1]
-
-    if start_address == end_address:
+    if is_round_trip:
         # Round trip
         nodes = list(range(len(waypoints)))
         best_path_indices = None
         min_dist = float('inf')
 
+        # We start at node 0, so we permute the other nodes
         for p in permutations(nodes[1:]):
+            # We add the start node at the beginning and end to complete the loop
             path = [nodes[0]] + list(p) + [nodes[0]]
             dist = 0
             for i in range(len(path) - 1):
@@ -69,7 +71,8 @@ def optimize_route(waypoints, dist_matrix):
 
             if dist < min_dist:
                 min_dist = dist
-                best_path_indices = path[:-1]
+                # For a round trip, we return the path including the final return to the start
+                best_path_indices = path
 
         return [waypoints[i] for i in best_path_indices]
 
@@ -100,8 +103,6 @@ if 'stops' not in st.session_state:
     st.session_state.stops = []
 if 'optimized_route' not in st.session_state:
     st.session_state.optimized_route = None
-if 'api_key' not in st.session_state:
-    st.session_state.api_key = ""
 
 
 def add_stop():
@@ -111,7 +112,7 @@ def remove_stop(index):
     st.session_state.stops.pop(index)
 
 # --- UI ---
-st.session_state.api_key = st.text_input("Google Maps API Key", type="password", value=st.session_state.api_key)
+api_key = os.getenv("GOOGLE_MAPS_API_KEY")
 col1, col2 = st.columns(2)
 
 with col1:
@@ -130,17 +131,30 @@ with col1:
         add_stop()
         st.experimental_rerun()
 
+    st.subheader("Bulk Add Stops")
+    bulk_stops = st.text_area("Paste a list of stops (one per line)")
+    if st.button("Add Bulk Stops"):
+        stops_list = [s.strip() for s in bulk_stops.split("\n") if s.strip()]
+        st.session_state.stops.extend(stops_list)
+        st.experimental_rerun()
+
     if st.button("Optimize Route"):
-        if not st.session_state.api_key:
-            st.error("Please enter your Google Maps API Key.")
+        if not api_key:
+            st.error("Please create a .env file with your GOOGLE_MAPS_API_KEY.")
         elif not start_address or not end_address:
             st.error("Please enter a start and end address.")
         else:
             with st.spinner("Optimizing route..."):
                 try:
-                    waypoints = [start_address] + [s for s in st.session_state.stops if s] + [end_address]
-                    dist_matrix = get_distance_matrix(waypoints, st.session_state.api_key)
-                    optimized_route = optimize_route(waypoints, dist_matrix)
+                    is_round_trip = (start_address == end_address)
+
+                    if is_round_trip:
+                        waypoints = [start_address] + [s for s in st.session_state.stops if s]
+                    else:
+                        waypoints = [start_address] + [s for s in st.session_state.stops if s] + [end_address]
+
+                    dist_matrix = get_distance_matrix(waypoints, api_key)
+                    optimized_route = optimize_route(waypoints, dist_matrix, is_round_trip)
                     st.session_state.optimized_route = optimized_route
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
@@ -155,14 +169,19 @@ with col2:
     st.header("Map")
     if st.session_state.optimized_route:
         origin = quote(st.session_state.optimized_route[0])
-        destination = quote(st.session_state.optimized_route[-1])
-        # The waypoints parameter should only contain the stops between the origin and destination.
-        waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
 
-        embed_url = f"https://www.google.com/maps/embed/v1/directions?key={st.session_state.api_key}&origin={origin}&destination={destination}&waypoints={waypoints_str}"
+        # For a round trip, the destination is the same as the origin
+        if start_address == end_address:
+            destination = origin
+            # The last stop in the optimized route is the start address, so we don't include it in the waypoints
+            waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
+        else:
+            destination = quote(st.session_state.optimized_route[-1])
+            waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
+
+        embed_url = f"https://www.google.com/maps/embed/v1/directions?key={api_key}&origin={origin}&destination={destination}&waypoints={waypoints_str}"
         st.components.v1.iframe(embed_url, height=600)
     else:
         # Placeholder map
-        placeholder_address = "4645 Plano Pkwy, Carrollton, TX 75010, USA"
-        embed_url = f"https://www.google.com/maps/embed/v1/place?key={st.session_state.api_key}&q={quote(placeholder_address)}"
+        embed_url = f"https://www.google.com/maps/embed/v1/view?key={api_key}&center=32.973514,-96.8920588&zoom=12"
         st.components.v1.iframe(embed_url, height=600)
