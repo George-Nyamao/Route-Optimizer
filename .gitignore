@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -215,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+=======
+app.log
+.env
+__pycache__/
+map_env/
+>>>>>>> origin/feat/streamlit-refactor
