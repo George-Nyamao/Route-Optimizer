@@ -63,7 +63,7 @@ def find_closest_stop(start_address, stops, api_key):
     return closest_stop, closest_stop_index
 
 
-def optimize_route(waypoints, dist_matrix, is_round_trip):
+def optimize_route(waypoints, dist_matrix):
     if len(waypoints) < 2:
         return waypoints
 
@@ -71,48 +71,44 @@ def optimize_route(waypoints, dist_matrix, is_round_trip):
         st.error("Too many waypoints for brute-force optimization. Please use 8 or fewer stops.")
         return None
 
-    if is_round_trip:
-        # Round trip
-        nodes = list(range(len(waypoints)))
-        best_path_indices = None
-        min_dist = float('inf')
+    nodes = list(range(len(waypoints)))
+    start_node = 0
+    end_node = len(waypoints) - 1
 
-        # We start at node 0, so we permute the other nodes
-        for p in permutations(nodes[1:]):
-            # We add the start node at the beginning and end to complete the loop
-            path = [nodes[0]] + list(p) + [nodes[0]]
-            dist = 0
-            for i in range(len(path) - 1):
-                dist += dist_matrix[path[i]][path[i+1]]
+    # We permute all nodes except the start and end nodes
+    nodes_to_permute = [i for i in nodes if i != start_node and i != end_node]
 
-            if dist < min_dist:
-                min_dist = dist
-                # For a round trip, we return the path including the final return to the start
-                best_path_indices = path
+    best_path_indices = None
+    min_dist = float('inf')
 
-        return [waypoints[i] for i in best_path_indices]
+    for p in permutations(nodes_to_permute):
+        path = [start_node] + list(p) + [end_node]
+        dist = 0
+        for i in range(len(path) - 1):
+            dist += dist_matrix[path[i]][path[i+1]]
 
-    else:
-        # One-way trip
-        nodes = list(range(len(waypoints)))
-        start_node = 0
-        end_node = len(waypoints) - 1
-        nodes_to_permute = [i for i in nodes if i != start_node and i != end_node]
+        if dist < min_dist:
+            min_dist = dist
+            best_path_indices = path
 
-        best_path_indices = None
-        min_dist = float('inf')
+    return [waypoints[i] for i in best_path_indices]
 
-        for p in permutations(nodes_to_permute):
-            path = [start_node] + list(p) + [end_node]
-            dist = 0
-            for i in range(len(path) - 1):
-                dist += dist_matrix[path[i]][path[i+1]]
+def generate_google_maps_url(optimized_route):
+    base_url = "https://www.google.com/maps/dir/?api=1"
+    origin = f"&origin={quote(optimized_route[0])}"
+    destination = f"&destination={quote(optimized_route[-1])}"
+    waypoints = "&waypoints=" + "|".join([quote(s) for s in optimized_route[1:-1]])
+    return f"{base_url}{origin}{destination}{waypoints}"
 
-            if dist < min_dist:
-                min_dist = dist
-                best_path_indices = path
+def generate_apple_maps_url(optimized_route):
+    base_url = "http://maps.apple.com/"
+    params = []
+    params.append(f"saddr={quote(optimized_route[0])}")
+    # For Apple Maps, intermediate stops are specified with `daddr` as well
+    for point in optimized_route[1:]:
+        params.append(f"daddr={quote(point)}")
+    return f"{base_url}?{'&'.join(params)}"
 
-        return [waypoints[i] for i in best_path_indices]
 
 # Initialize session state
 if 'stops' not in st.session_state:
@@ -184,7 +180,7 @@ with col1:
                             new_end_address = start_address
                             waypoints = [new_start_address] + remaining_stops + [new_end_address]
                             dist_matrix = get_distance_matrix(waypoints, api_key)
-                            optimized_remaining_route = optimize_route(waypoints, dist_matrix, False)
+                            optimized_remaining_route = optimize_route(waypoints, dist_matrix)
 
                             # The final route
                             optimized_route = [start_address] + optimized_remaining_route
@@ -194,7 +190,7 @@ with col1:
                             new_end_address = end_address
                             waypoints = [new_start_address] + remaining_stops + [new_end_address]
                             dist_matrix = get_distance_matrix(waypoints, api_key)
-                            optimized_remaining_route = optimize_route(waypoints, dist_matrix, False)
+                            optimized_remaining_route = optimize_route(waypoints, dist_matrix)
 
                             # The final route
                             optimized_route = [start_address] + optimized_remaining_route
@@ -209,9 +205,18 @@ if st.session_state.optimized_route:
         st.header("Optimized Route")
         route = st.session_state.optimized_route
         st.write(f"Start: {route[0]}")
-        for i, point in enumerate(route[1:-1]):
-            st.write(f"Stop {i+1}: {point}")
+        # The first stop is the closest stop
+        st.write(f"Stop 1: {route[1]}")
+        # The rest of the stops
+        for i, point in enumerate(route[2:-1]):
+            st.write(f"Stop {i+2}: {point}")
         st.write(f"End: {route[-1]}")
+
+        st.header("Open in Maps")
+        google_maps_url = generate_google_maps_url(route)
+        apple_maps_url = generate_apple_maps_url(route)
+        st.markdown(f'[Open in Google Maps]({google_maps_url})', unsafe_allow_html=True)
+        st.markdown(f'[Open in Apple Maps]({apple_maps_url})', unsafe_allow_html=True)
 
 with col2:
     st.header("Map")
