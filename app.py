@@ -47,6 +47,22 @@ def get_distance_matrix(waypoints, api_key):
 
     return dist_matrix
 
+def find_closest_stop(start_address, stops, api_key):
+    if not stops:
+        return None, None
+
+    waypoints = [start_address] + stops
+    dist_matrix = get_distance_matrix(waypoints, api_key)
+
+    # The first row of the distance matrix contains the distances from the start address to all stops
+    distances = [dist_matrix[0][i+1] for i in range(len(stops))]
+
+    closest_stop_index = distances.index(min(distances))
+    closest_stop = stops[closest_stop_index]
+
+    return closest_stop, closest_stop_index
+
+
 def optimize_route(waypoints, dist_matrix, is_round_trip):
     if len(waypoints) < 2:
         return waypoints
@@ -146,38 +162,63 @@ with col1:
         else:
             with st.spinner("Optimizing route..."):
                 try:
-                    is_round_trip = (start_address == end_address)
+                    stops = [s for s in st.session_state.stops if s]
 
-                    if is_round_trip:
-                        waypoints = [start_address] + [s for s in st.session_state.stops if s]
+                    # Step 1: Find the closest stop to the start address
+                    closest_stop, closest_stop_index = find_closest_stop(start_address, stops, api_key)
+
+                    if closest_stop is None:
+                        st.error("Please add at least one stop.")
                     else:
-                        waypoints = [start_address] + [s for s in st.session_state.stops if s] + [end_address]
+                        # The rest of the stops to be optimized
+                        remaining_stops = stops[:closest_stop_index] + stops[closest_stop_index+1:]
 
-                    dist_matrix = get_distance_matrix(waypoints, api_key)
-                    optimized_route = optimize_route(waypoints, dist_matrix, is_round_trip)
-                    st.session_state.optimized_route = optimized_route
+                        # Step 2: Optimize the route for the remaining stops
+                        is_round_trip = (start_address == end_address)
+
+                        # The new start point for the optimization is the closest stop
+                        new_start_address = closest_stop
+
+                        if is_round_trip:
+                            # The end point for the optimization is the original start address
+                            new_end_address = start_address
+                            waypoints = [new_start_address] + remaining_stops + [new_end_address]
+                            dist_matrix = get_distance_matrix(waypoints, api_key)
+                            optimized_remaining_route = optimize_route(waypoints, dist_matrix, False)
+
+                            # The final route
+                            optimized_route = [start_address] + optimized_remaining_route
+
+                        else:
+                            # The end point is the original end address
+                            new_end_address = end_address
+                            waypoints = [new_start_address] + remaining_stops + [new_end_address]
+                            dist_matrix = get_distance_matrix(waypoints, api_key)
+                            optimized_remaining_route = optimize_route(waypoints, dist_matrix, False)
+
+                            # The final route
+                            optimized_route = [start_address] + optimized_remaining_route
+
+                        st.session_state.optimized_route = optimized_route
+
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
 
 if st.session_state.optimized_route:
     with col1:
         st.header("Optimized Route")
-        for point in st.session_state.optimized_route:
-            st.write(point)
+        route = st.session_state.optimized_route
+        st.write(f"Start: {route[0]}")
+        for i, point in enumerate(route[1:-1]):
+            st.write(f"Stop {i+1}: {point}")
+        st.write(f"End: {route[-1]}")
 
 with col2:
     st.header("Map")
     if st.session_state.optimized_route:
         origin = quote(st.session_state.optimized_route[0])
-
-        # For a round trip, the destination is the same as the origin
-        if start_address == end_address:
-            destination = origin
-            # The last stop in the optimized route is the start address, so we don't include it in the waypoints
-            waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
-        else:
-            destination = quote(st.session_state.optimized_route[-1])
-            waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
+        destination = quote(st.session_state.optimized_route[-1])
+        waypoints_str = "|".join([quote(s) for s in st.session_state.optimized_route[1:-1]])
 
         embed_url = f"https://www.google.com/maps/embed/v1/directions?key={api_key}&origin={origin}&destination={destination}&waypoints={waypoints_str}"
         st.components.v1.iframe(embed_url, height=600)
